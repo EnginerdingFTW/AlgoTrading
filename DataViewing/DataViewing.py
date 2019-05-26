@@ -32,3 +32,9 @@ class DataViewing():
         plt.ylabel("Price")
         plt.title(ticker)
         plt.show()
+
+        self.plotDict[fig] = {
+            "figure": fig,
+            "axis": ax1,
+        }
+        return fig
