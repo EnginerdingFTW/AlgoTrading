@@ -142,11 +142,11 @@ class DataGrabber():
                 data_stream.append([
                             initial_datetime.strftime("%Y-%m-%d %H:%M"),
                             initial_datetime,
-                            data[start_time]["1. open"],
-                            data[start_time]["2. high"],
-                            data[start_time]["3. low"],
-                            data[start_time]["4. close"],
-                            data[start_time]["5. volume"]
+                            float(data[start_time]["1. open"]),
+                            float(data[start_time]["2. high"]),
+                            float(data[start_time]["3. low"]),
+                            float(data[start_time]["4. close"]),
+                            float(data[start_time]["5. volume"])
                         ])
             initial_datetime += datetime.timedelta(seconds=seconds_interval)
             if (time_included):

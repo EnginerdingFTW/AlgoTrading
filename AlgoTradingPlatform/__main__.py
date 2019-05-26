@@ -1,4 +1,4 @@
-from AlgoTradingPlatform import main
+from .AlgoTradingPlatform import main
 from sys import argv
 
 if __name__ == "__main__":
