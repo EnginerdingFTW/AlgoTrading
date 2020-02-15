@@ -11,7 +11,17 @@ class DataGrabber():
         self.api_key = api_key
         self.cache_dir = cache_dir
         self.intra_day_time_series = ["1min", "5min", "15min", "30min", "60min"]
-        self.time_series = self.intra_day_time_series + ["1day"]
+        self.time_series = self.intra_day_time_series + ["1day", "7day"]
+        self.multi_day_series = ["7day"]
+        self.increment = {
+            "1min": 60,
+            "5min": 300,
+            "15min": 900,
+            "30min": 1800,
+            "60min": 3600,
+            "1day": 86400,
+            "7day": 604800,        # NOTE! if a sample is missing, it will extend to 2 weeks (or 3, etc.).
+        }
 
     def getTickerData(self, ticker, interval, start_time, end_time):
         ticker_data = None
@@ -47,7 +57,8 @@ class DataGrabber():
         if (self.cache_dir is not None and loading_new_data):
             with open(cache_file, "w") as f:
                 json.dump(ticker_data, f, indent=4, sort_keys=True)
-        return DataGrabber.transformMarketDataToDataFrame(ticker_data[interval], interval, start_time, end_time)
+
+        return self.transformMarketDataToDataFrame(ticker_data[interval], interval, start_time, end_time)
 
     def getAlphaVantageData(self, ticker, interval):
         if (interval in self.intra_day_time_series):
@@ -60,26 +71,54 @@ class DataGrabber():
         interval_ticker_data = json.loads(request_data.text)
         return interval_ticker_data
 
-    @staticmethod
-    def transformMarketDataToNumpyArray(data, interval, start_time, end_time):
-        data_stream = {
-            "date": [],
-            "1. open": [],
-            "2. high": [],
-            "3. low": [],
-            "4. close": [],
-            "5. volume": []
-        }
+    # def transformMarketDataToNumpyArray(self, data, interval, start_time, end_time):
+    #     data_stream = {
+    #         "date": [],
+    #         "1. open": [],
+    #         "2. high": [],
+    #         "3. low": [],
+    #         "4. close": [],
+    #         "5. volume": []
+    #     }
+    #
+    #     seconds_interval = self.increment[interval]
+    #     if (" " in start_time and (interval in ["1day", "1week"])):
+    #         start_time = start_time.split(" ")[0]
+    #         end_time = end_time.split(" ")[0]
+    #     if (" " in start_time):
+    #         time_included = True
+    #         initial_datetime = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
+    #         final_datetime = datetime.datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S")
+    #     else:
+    #         time_included = False
+    #         initial_datetime = datetime.datetime.strptime(start_time, "%Y-%m-%d")
+    #         final_datetime = datetime.datetime.strptime(end_time, "%Y-%m-%d")
+    #
+    #     while (start_time not in data.keys() and initial_datetime <= final_datetime):
+    #         initial_datetime += datetime.timedelta(seconds=seconds_interval)
+    #         if (time_included):
+    #             start_time = initial_datetime.strftime("%Y-%m-%d %H:%M:%S")
+    #         else:
+    #             start_time = initial_datetime.strftime("%Y-%m-%d")
+    #     while (initial_datetime <= final_datetime):
+    #         if (start_time in data.keys()):
+    #             data_stream["date"].append(start_time)
+    #             for _key in ["1. open", "2. high", "3. low", "4. close", "5. volume"]:
+    #                 data_stream[_key].append(data[start_time][_key])
+    #         initial_datetime += datetime.timedelta(seconds=seconds_interval)
+    #         if (time_included):
+    #             start_time = initial_datetime.strftime("%Y-%m-%d %H:%M:%S")
+    #         else:
+    #             start_time = initial_datetime.strftime("%Y-%m-%d")
+    #     for _key in data_stream:
+    #         data_stream[_key] = np.array(data_stream[_key])
+    #     return data_stream
 
-        increment = {
-            "1min": 60,
-            "5min": 300,
-            "15min": 900,
-            "30min": 1800,
-            "60min": 3600,
-            "1day": 86400,
-        }
-        seconds_interval = increment[interval]
+    def transformMarketDataToDataFrame(self, data, interval, start_time, end_time):
+        seconds_interval = self.increment[interval]
+        if (" " in start_time and (interval not in self.intra_day_time_series)):
+            start_time = start_time.split(" ")[0]
+            end_time = end_time.split(" ")[0]
         if (" " in start_time):
             time_included = True
             initial_datetime = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
@@ -95,59 +134,38 @@ class DataGrabber():
                 start_time = initial_datetime.strftime("%Y-%m-%d %H:%M:%S")
             else:
                 start_time = initial_datetime.strftime("%Y-%m-%d")
-        while (initial_datetime <= final_datetime):
-            if (start_time in data.keys()):
-                data_stream["date"].append(start_time)
-                for _key in ["1. open", "2. high", "3. low", "4. close", "5. volume"]:
-                    data_stream[_key].append(data[start_time][_key])
-            initial_datetime += datetime.timedelta(seconds=seconds_interval)
-            if (time_included):
-                start_time = initial_datetime.strftime("%Y-%m-%d %H:%M:%S")
-            else:
-                start_time = initial_datetime.strftime("%Y-%m-%d")
-        for _key in data_stream:
-            data_stream[_key] = np.array(data_stream[_key])
-        return data_stream
 
-    @staticmethod
-    def transformMarketDataToDataFrame(data, interval, start_time, end_time):
+        return self.GetDataStream(data, initial_datetime, final_datetime, seconds_interval,
+                                                      interval, time_included)
+
+    def GetDataStream(self, data, initial_datetime, final_datetime, seconds_interval, interval, time_included=True):
+        start_time = initial_datetime
         data_stream = []
-
-        increment = {
-            "1min": 60,
-            "5min": 300,
-            "15min": 900,
-            "30min": 1800,
-            "60min": 3600,
-            "1day": 86400,
-        }
-        seconds_interval = increment[interval]
-        if (" " in start_time):
-            time_included = True
-            initial_datetime = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
-            final_datetime = datetime.datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S")
-        else:
-            time_included = False
-            initial_datetime = datetime.datetime.strptime(start_time, "%Y-%m-%d")
-            final_datetime = datetime.datetime.strptime(end_time, "%Y-%m-%d")
-
-        while (start_time not in data.keys() and initial_datetime <= final_datetime):
-            initial_datetime += datetime.timedelta(seconds=seconds_interval)
-            if (time_included):
-                start_time = initial_datetime.strftime("%Y-%m-%d %H:%M:%S")
-            else:
-                start_time = initial_datetime.strftime("%Y-%m-%d")
         while (initial_datetime <= final_datetime):
             if (start_time in data.keys()):
-                data_stream.append([
-                            initial_datetime.strftime("%Y-%m-%d %H:%M"),
-                            initial_datetime,
-                            float(data[start_time]["1. open"]),
-                            float(data[start_time]["2. high"]),
-                            float(data[start_time]["3. low"]),
-                            float(data[start_time]["4. close"]),
-                            float(data[start_time]["5. volume"])
-                        ])
+                if (interval in self.multi_day_series):
+                    next_datetime = initial_datetime + datetime.timedelta(seconds=seconds_interval)
+
+                    temp_data_stream = self.GetDataStream(data, initial_datetime, next_datetime,
+                                                          self.increment["1day"], "1day", time_included=False)
+                    open = temp_data_stream["Open"][0]
+                    high = np.max(temp_data_stream["High"])
+                    low = np.min(temp_data_stream["Low"])
+                    close = temp_data_stream["Close"][temp_data_stream.index[-1]]
+                    volume = np.sum(temp_data_stream["Volume"])
+                    data_stream.append([
+                        initial_datetime.strftime("%Y-%m-%d %H:%M"), initial_datetime, open, high, low, close, volume
+                    ])
+                else:
+                    data_stream.append([
+                        initial_datetime.strftime("%Y-%m-%d %H:%M"),
+                        initial_datetime,
+                        float(data[start_time]["1. open"]),
+                        float(data[start_time]["2. high"]),
+                        float(data[start_time]["3. low"]),
+                        float(data[start_time]["4. close"]),
+                        float(data[start_time]["5. volume"])
+                    ])
             initial_datetime += datetime.timedelta(seconds=seconds_interval)
             if (time_included):
                 start_time = initial_datetime.strftime("%Y-%m-%d %H:%M:%S")
@@ -155,6 +173,7 @@ class DataGrabber():
                 start_time = initial_datetime.strftime("%Y-%m-%d")
         return pd.DataFrame.from_records(np.array(data_stream),
                                          columns=["Date String", "Date", "Open", "High", "Low", "Close", "Volume"])
+
 
     def UpdateTickerData(self, ticker_data, ticker, interval):
         interval_ticker_data = self.getAlphaVantageData(ticker, interval)
